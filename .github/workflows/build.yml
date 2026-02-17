@@ -1,0 +1,74 @@
+name: Build NeuralGram APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:   # allows manual trigger from GitHub UI
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # 3. Set up Android SDK + NDK (needed for JNI / C code)
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          echo "y" | sdkmanager "ndk;26.1.10909125" "cmake;3.22.1"
+
+      # 4. Make gradlew executable
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # 5. Build debug APK
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+
+      # 6. Upload APK as artifact (downloadable from Actions tab)
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuralGram-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # 7. On push to main — also create a GitHub Release
+      - name: Create Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "NeuralGram v${{ github.run_number }}"
+          body: |
+            🤖 **NeuralGram AI Camera**
+            Auto-built from commit ${{ github.sha }}
+
+            **What's inside:**
+            - AI scene detection (Portrait, Landscape, Low Light, Sunset, Indoor, Macro)
+            - Personal style learning from your favourite photos
+            - Native C processing via JNI (no GC pauses)
+            - 100% offline — all AI runs on-device
+
+            Download the APK below and install it on your Android device.
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
