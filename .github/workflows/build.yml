@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,9 +23,8 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      # 3. Set up Android SDK + NDK (needed for JNI / C code)
+      # 3. Set up Android SDK + NDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -33,17 +32,27 @@ jobs:
         run: |
           echo "y" | sdkmanager "ndk;26.1.10909125" "cmake;3.22.1"
 
-      # 4. Make gradlew executable
-      - name: Grant execute permission for gradlew
+      # 4. Setup Gradle (this fixes the wrapper issue)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.2
+
+      # 5. Generate Gradle Wrapper
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.2
+
+      # 6. Make gradlew executable
+      - name: Grant execute permission
         run: chmod +x gradlew
 
-      # 5. Build debug APK
+      # 7. Build debug APK
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
 
-      # 6. Upload APK as artifact (downloadable from Actions tab)
+      # 8. Upload APK as artifact
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -51,7 +60,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # 7. On push to main — also create a GitHub Release
+      # 9. Create GitHub Release (on push to main)
       - name: Create Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
@@ -62,7 +71,7 @@ jobs:
             🤖 **NeuralGram AI Camera**
             Auto-built from commit ${{ github.sha }}
 
-            **What's inside:**
+            **Features:**
             - AI scene detection (Portrait, Landscape, Low Light, Sunset, Indoor, Macro)
             - Personal style learning from your favourite photos
             - Native C processing via JNI (no GC pauses)
